@@ -35,3 +35,11 @@
   font-size: 24px;
   font-weight: 600;
 }
+
+.clock {
+  position: fixed;
+  bottom: 32px;
+  right: 32px;
+  font: bold 48px Liberation Mono, Cousine, monospace;
+  opacity: 0.64;
+}
