@@ -1,6 +1,10 @@
 import { colord } from "./colord";
 import md5 from "md5";
 import { instruments } from "./data";
+import { searchParams } from "./searchParams";
+
+const numColumns = +searchParams.get("columns")! || 4;
+const server = searchParams.get("apiserver");
 
 export interface Client {
   name: string;
@@ -153,11 +157,12 @@ function evaluateClient(vm: ClientViewModel, time: number) {
 }
 
 function layoutClient(vm: ClientViewModel, i: number, count: number) {
-  const maxColumns = 4;
+  const maxColumns = numColumns;
   const numRows = Math.ceil(count / maxColumns);
   const row = Math.floor(i / maxColumns);
   const column = i % maxColumns;
-  const rowSize = row === numRows - 1 ? count % maxColumns : maxColumns;
+  const rowSize =
+    row === numRows - 1 ? count % maxColumns || maxColumns : maxColumns;
   const centerX = (rowSize - 1) / 2;
   const centerY = (numRows - 1) / 2;
   const x = column - centerX;
@@ -199,7 +204,6 @@ function exponentialRamp(
 
 export const animation = createAnimation();
 
-const server = new URLSearchParams(location.search).get("apiserver");
 if (server) {
   const eventSource = new EventSource(server + "/events");
   eventSource.addEventListener("message", (event) => {
