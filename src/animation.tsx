@@ -199,39 +199,41 @@ function exponentialRamp(
 
 export const animation = createAnimation();
 
-// fetch("http://localhost:1111/events.ndjson")
-//   .then((r) => {
-//     if (!r.ok) {
-//       throw new Error(r.statusText);
-//     }
-//     return r.text();
-//   })
-//   .then(async (text) => {
-//     const events = text
-//       .split("\n")
-//       .filter((x) => x.trim())
-//       .map((x) => JSON.parse(x));
-//     let lastTime: number | undefined;
-//     const start = performance.now();
-//     let target = performance.now();
-//     for (const e of events) {
-//       if (e.initial) {
-//         lastTime = e.initial.startTime;
-//         console.log(e.initial);
-//         animation.ingest(e.initial.state);
-//       } else if (e.event && lastTime) {
-//         const delta = e.event.time - lastTime;
-//         target += delta;
-//         lastTime = e.event.time;
-//         await new Promise((r) => setTimeout(r, target - performance.now()));
-//         animation.ingest(e.event.data);
-//       }
-//     }
-//   });
-
-const eventSource = new EventSource("https://lobby.musicjammingth.net/events");
-
-eventSource.addEventListener("message", (event) => {
-  const data = JSON.parse(event.data);
-  animation.ingest(data);
-});
+const server = new URLSearchParams(location.search).get("apiserver");
+if (server) {
+  const eventSource = new EventSource(server + "/events");
+  eventSource.addEventListener("message", (event) => {
+    const data = JSON.parse(event.data);
+    animation.ingest(data);
+  });
+} else {
+  fetch("http://localhost:1111/events.ndjson")
+    .then((r) => {
+      if (!r.ok) {
+        throw new Error(r.statusText);
+      }
+      return r.text();
+    })
+    .then(async (text) => {
+      const events = text
+        .split("\n")
+        .filter((x) => x.trim())
+        .map((x) => JSON.parse(x));
+      let lastTime: number | undefined;
+      const start = performance.now();
+      let target = performance.now();
+      for (const e of events) {
+        if (e.initial) {
+          lastTime = e.initial.startTime;
+          console.log(e.initial);
+          animation.ingest(e.initial.state);
+        } else if (e.event && lastTime) {
+          const delta = e.event.time - lastTime;
+          target += delta;
+          lastTime = e.event.time;
+          await new Promise((r) => setTimeout(r, target - performance.now()));
+          animation.ingest(e.event.data);
+        }
+      }
+    });
+}
