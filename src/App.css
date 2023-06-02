@@ -1,7 +1,7 @@
 .client {
   width: 280px;
   height: 80px;
-  position: absolute;
+  position: fixed;
   top: 50%;
   left: 50%;
   color: rgb(var(--client-color));
