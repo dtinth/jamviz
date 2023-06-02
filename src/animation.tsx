@@ -149,7 +149,7 @@ function evaluateClient(vm: ClientViewModel, time: number) {
   if (vm.soundLevel >= 2) {
     vm.lastSound = time;
   }
-  vm.shouldDisplay = vm.connected && time - vm.lastSound < 4000;
+  vm.shouldDisplay = vm.connected && time - vm.lastSound < 8000;
 }
 
 function layoutClient(vm: ClientViewModel, i: number, count: number) {
