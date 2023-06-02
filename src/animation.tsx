@@ -5,6 +5,8 @@ import { searchParams } from "./searchParams";
 
 const numColumns = +searchParams.get("columns")! || 4;
 const server = searchParams.get("apiserver");
+const eventNdjsonSrc = searchParams.get("src");
+const audioSrc = searchParams.get("audio");
 
 export interface Client {
   name: string;
@@ -29,13 +31,18 @@ export interface ClientFrameData {
   instrument: string;
 }
 
+interface GojamEvent {
+  clients?: Client[];
+  levels?: number[];
+}
+
 function createAnimation() {
   let lastTime: number | undefined;
   const clients = new Map<string, ClientViewModel>();
   const connectedIds = new Set<string>();
   let ids: string[] = [];
 
-  function ingest(data?: { clients?: Client[]; levels?: number[] }) {
+  function ingest(data?: GojamEvent) {
     if (!data) return;
     if (data.clients) {
       const used = new Set<string>();
@@ -93,7 +100,7 @@ function createAnimation() {
     }
 
     return {
-      clients: clientsToShow,
+      clients: clientsToShow.map((c) => ({ ...c })),
     };
   }
   return { ingest, frame };
@@ -233,13 +240,18 @@ function exponentialRamp(
 
 export const animation = createAnimation();
 
+interface TimedGojamEvent {
+  time: number;
+  data: GojamEvent;
+}
+
 if (server) {
   const eventSource = new EventSource(server + "/events");
   eventSource.addEventListener("message", (event) => {
     const data = JSON.parse(event.data);
     animation.ingest(data);
   });
-} else {
+} else if (eventNdjsonSrc) {
   fetch("http://localhost:1111/events.ndjson")
     .then((r) => {
       if (!r.ok) {
@@ -252,21 +264,78 @@ if (server) {
         .split("\n")
         .filter((x) => x.trim())
         .map((x) => JSON.parse(x));
-      let lastTime: number | undefined;
-      const start = performance.now();
-      let target = performance.now();
-      for (const e of events) {
-        if (e.initial) {
-          lastTime = e.initial.startTime;
-          console.log(e.initial);
-          animation.ingest(e.initial.state);
-        } else if (e.event && lastTime) {
-          const delta = e.event.time - lastTime;
-          target += delta;
-          lastTime = e.event.time;
-          await new Promise((r) => setTimeout(r, target - performance.now()));
-          animation.ingest(e.event.data);
+      return events;
+    })
+    .then(async (events) => {
+      if (audioSrc) {
+        let audio = document.querySelector("#audio") as HTMLAudioElement & {
+          durationPromise?: Promise<number>;
+        };
+        if (!audio) {
+          audio = document.createElement("audio");
+          audio.id = "audio";
+          audio.src = audioSrc;
+          audio.controls = true;
+          document.body.appendChild(audio);
+          audio.durationPromise = new Promise((r) => {
+            audio.addEventListener("loadedmetadata", () => {
+              r(audio.duration);
+            });
+          });
+        }
+        const duration = (await audio.durationPromise)!;
+        const nFrames = Math.ceil(duration * 60);
+        const dataEvents: TimedGojamEvent[] = [];
+        const animationFrames: FrameData[] = [];
+        let startTime: number | undefined;
+        for (const e of events) {
+          if (e.initial) {
+            startTime = e.initial.startTime;
+            animation.ingest(e.initial.state);
+          } else if (e.event) {
+            dataEvents.push(e.event);
+          }
+        }
+        if (!startTime) {
+          throw new Error("No start time");
+        }
+        let nextEventIndex = 0;
+        for (let i = 0; i < nFrames; i++) {
+          const animationTime = (i / 60) * 1000;
+          const eventTime = startTime + animationTime;
+          while (
+            nextEventIndex < dataEvents.length &&
+            dataEvents[nextEventIndex].time < eventTime
+          ) {
+            animation.ingest(dataEvents[nextEventIndex].data);
+            nextEventIndex++;
+          }
+          animationFrames.push(animation.frame(animationTime));
+        }
+        animation.frame = () => {
+          const index = Math.floor(audio.currentTime * 60);
+          return animationFrames[
+            Math.max(0, Math.min(index, animationFrames.length - 1))
+          ];
+        };
+      } else {
+        let lastTime: number | undefined;
+        let target = performance.now();
+        for (const e of events) {
+          if (e.initial) {
+            lastTime = e.initial.startTime;
+            console.log(e.initial);
+            animation.ingest(e.initial.state);
+          } else if (e.event && lastTime) {
+            const delta = e.event.time - lastTime;
+            target += delta;
+            lastTime = e.event.time;
+            await new Promise((r) => setTimeout(r, target - performance.now()));
+            animation.ingest(e.event.data);
+          }
         }
       }
     });
+} else {
+  console.log("No data source.");
 }
