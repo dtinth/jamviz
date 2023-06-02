@@ -44,8 +44,8 @@ function ClientsView() {
 }
 
 function ClientView({ client }: { client: ClientFrameData }) {
-  const x = client.x * 320;
-  const y = client.y * 120;
+  const x = client.x * 300;
+  const y = client.y * 100;
   return (
     <div
       className="client"
