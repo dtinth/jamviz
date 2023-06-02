@@ -87,9 +87,7 @@ function createAnimation() {
     const clientsToLayout = clientsToShow
       .filter((x) => x.shouldDisplay)
       .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
-    for (const [i, vm] of clientsToLayout.entries()) {
-      layoutClient(vm, i, clientsToLayout.length);
-    }
+    layoutClients(clientsToLayout);
     for (const vm of clients.values()) {
       animateClient(vm, time, delta);
     }
@@ -156,8 +154,38 @@ function evaluateClient(vm: ClientViewModel, time: number) {
   vm.shouldDisplay = vm.connected && time - vm.lastSound < 8000;
 }
 
-function layoutClient(vm: ClientViewModel, i: number, count: number) {
-  const maxColumns = numColumns;
+function layoutClients(vms: ClientViewModel[]) {
+  const maxColumns = getBestColumns(vms.length);
+  for (const [i, vm] of vms.entries()) {
+    layoutClient(vm, i, vms.length, maxColumns);
+  }
+}
+
+function getBestColumns(count: number) {
+  const numRows = Math.ceil(count / numColumns);
+  const candidates: { numColumns: number; mse: number }[] = [];
+  for (let i = numColumns; i >= 1; i--) {
+    const numRowsCandidate = Math.ceil(count / i);
+    if (numRowsCandidate !== numRows) {
+      break;
+    }
+    const averageWidth = count / i;
+    const meanSquaredError = Array.from({ length: numRows }, (_, j) => {
+      const width = j === numRows - 1 ? count % i || i : i;
+      return (width - averageWidth) ** 2;
+    }).reduce((a, b) => a + b, 0);
+    candidates.push({ numColumns: i, mse: meanSquaredError });
+  }
+  if (candidates.length > 1) Object.assign(window, { candidates });
+  return candidates.sort((a, b) => a.mse - b.mse)[0].numColumns;
+}
+
+function layoutClient(
+  vm: ClientViewModel,
+  i: number,
+  count: number,
+  maxColumns: number
+) {
   const numRows = Math.ceil(count / maxColumns);
   const row = Math.floor(i / maxColumns);
   const column = i % maxColumns;
@@ -170,6 +198,7 @@ function layoutClient(vm: ClientViewModel, i: number, count: number) {
   vm.targetX = x;
   vm.targetY = y;
 }
+
 function animateClient(vm: ClientViewModel, time: number, delta: number) {
   vm.x = exponentialRamp(vm.x, vm.targetX, delta);
   vm.y = exponentialRamp(vm.y, vm.targetY, delta);
