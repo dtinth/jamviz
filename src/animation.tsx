@@ -2,6 +2,7 @@ import { colord } from "./colord";
 import md5 from "md5";
 import { instruments } from "./data";
 import { searchParams } from "./searchParams";
+import { Approacher, approach, createApproacher } from "./Approacher";
 
 const numColumns = +searchParams.get("columns")! || 4;
 const server = searchParams.get("apiserver");
@@ -120,6 +121,8 @@ interface ClientViewModel {
   targetX: number;
   targetY: number;
 
+  xApproacher: Approacher;
+  yApproacher: Approacher;
   x: number;
   y: number;
   a: number;
@@ -142,6 +145,8 @@ function createClientViewModel(id: string): ClientViewModel {
     targetX: 0,
     targetY: 0,
 
+    xApproacher: createApproacher(),
+    yApproacher: createApproacher(),
     x: 0,
     y: 0,
     a: 0,
@@ -207,8 +212,8 @@ function layoutClient(
 }
 
 function animateClient(vm: ClientViewModel, time: number, delta: number) {
-  vm.x = exponentialRamp(vm.x, vm.targetX, delta);
-  vm.y = exponentialRamp(vm.y, vm.targetY, delta);
+  vm.x = approach(vm.xApproacher, vm.targetX, delta);
+  vm.y = approach(vm.yApproacher, vm.targetY, delta);
   const targetOpacity = vm.shouldDisplay
     ? time - vm.lastSound < 1000
       ? 1
