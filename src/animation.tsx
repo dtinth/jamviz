@@ -3,6 +3,7 @@ import md5 from "md5";
 import { instruments } from "./data";
 import { searchParams } from "./searchParams";
 import { Approacher, approach, createApproacher } from "./Approacher";
+import { showLoadForm } from "./showLoadForm";
 
 const numColumns = +searchParams.get("columns")! || 4;
 const server = searchParams.get("apiserver");
@@ -250,6 +251,81 @@ interface TimedGojamEvent {
   data: GojamEvent;
 }
 
+async function runStoredEvents(text: string, audioSrc?: string | null) {
+  const events = text
+    .split("\n")
+    .filter((x) => x.trim())
+    .map((x) => JSON.parse(x));
+  if (audioSrc) {
+    let audio = document.querySelector("#audio") as HTMLAudioElement & {
+      durationPromise?: Promise<number>;
+    };
+    if (!audio) {
+      audio = document.createElement("audio");
+      audio.id = "audio";
+      audio.src = audioSrc;
+      audio.controls = true;
+      document.body.appendChild(audio);
+      audio.durationPromise = new Promise((r) => {
+        audio.addEventListener("loadedmetadata", () => {
+          r(audio.duration);
+        });
+      });
+    }
+    const duration = (await audio.durationPromise)!;
+    const nFrames = Math.ceil(duration * 60);
+    const dataEvents: TimedGojamEvent[] = [];
+    const animationFrames: FrameData[] = [];
+    let startTime: number | undefined;
+    for (const e of events) {
+      if (e.initial) {
+        startTime = e.initial.startTime;
+        animation.ingest(e.initial.state);
+      } else if (e.event) {
+        dataEvents.push(e.event);
+      }
+    }
+    if (!startTime) {
+      throw new Error("No start time");
+    }
+    let nextEventIndex = 0;
+    for (let i = 0; i < nFrames; i++) {
+      const animationTime = (i / 60) * 1000;
+      const eventTime = startTime + animationTime;
+      while (
+        nextEventIndex < dataEvents.length &&
+        dataEvents[nextEventIndex].time < eventTime
+      ) {
+        animation.ingest(dataEvents[nextEventIndex].data);
+        nextEventIndex++;
+      }
+      animationFrames.push(animation.frame(animationTime));
+    }
+    animation.frame = () => {
+      const index = Math.floor(audio.currentTime * 60);
+      return animationFrames[
+        Math.max(0, Math.min(index, animationFrames.length - 1))
+      ];
+    };
+  } else {
+    let lastTime: number | undefined;
+    let target = performance.now();
+    for (const e of events) {
+      if (e.initial) {
+        lastTime = e.initial.startTime;
+        console.log(e.initial);
+        animation.ingest(e.initial.state);
+      } else if (e.event && lastTime) {
+        const delta = e.event.time - lastTime;
+        target += delta;
+        lastTime = e.event.time;
+        await new Promise((r) => setTimeout(r, target - performance.now()));
+        animation.ingest(e.event.data);
+      }
+    }
+  }
+}
+
 if (server) {
   const eventSource = new EventSource(server + "/events");
   eventSource.addEventListener("message", (event) => {
@@ -257,90 +333,16 @@ if (server) {
     animation.ingest(data);
   });
 } else if (eventNdjsonSrc) {
-  fetch("http://localhost:1111/events.ndjson")
+  fetch(eventNdjsonSrc)
     .then((r) => {
       if (!r.ok) {
         throw new Error(r.statusText);
       }
       return r.text();
     })
-    .then(async (text) => {
-      const events = text
-        .split("\n")
-        .filter((x) => x.trim())
-        .map((x) => JSON.parse(x));
-      return events;
-    })
-    .then(async (events) => {
-      if (audioSrc) {
-        let audio = document.querySelector("#audio") as HTMLAudioElement & {
-          durationPromise?: Promise<number>;
-        };
-        if (!audio) {
-          audio = document.createElement("audio");
-          audio.id = "audio";
-          audio.src = audioSrc;
-          audio.controls = true;
-          document.body.appendChild(audio);
-          audio.durationPromise = new Promise((r) => {
-            audio.addEventListener("loadedmetadata", () => {
-              r(audio.duration);
-            });
-          });
-        }
-        const duration = (await audio.durationPromise)!;
-        const nFrames = Math.ceil(duration * 60);
-        const dataEvents: TimedGojamEvent[] = [];
-        const animationFrames: FrameData[] = [];
-        let startTime: number | undefined;
-        for (const e of events) {
-          if (e.initial) {
-            startTime = e.initial.startTime;
-            animation.ingest(e.initial.state);
-          } else if (e.event) {
-            dataEvents.push(e.event);
-          }
-        }
-        if (!startTime) {
-          throw new Error("No start time");
-        }
-        let nextEventIndex = 0;
-        for (let i = 0; i < nFrames; i++) {
-          const animationTime = (i / 60) * 1000;
-          const eventTime = startTime + animationTime;
-          while (
-            nextEventIndex < dataEvents.length &&
-            dataEvents[nextEventIndex].time < eventTime
-          ) {
-            animation.ingest(dataEvents[nextEventIndex].data);
-            nextEventIndex++;
-          }
-          animationFrames.push(animation.frame(animationTime));
-        }
-        animation.frame = () => {
-          const index = Math.floor(audio.currentTime * 60);
-          return animationFrames[
-            Math.max(0, Math.min(index, animationFrames.length - 1))
-          ];
-        };
-      } else {
-        let lastTime: number | undefined;
-        let target = performance.now();
-        for (const e of events) {
-          if (e.initial) {
-            lastTime = e.initial.startTime;
-            console.log(e.initial);
-            animation.ingest(e.initial.state);
-          } else if (e.event && lastTime) {
-            const delta = e.event.time - lastTime;
-            target += delta;
-            lastTime = e.event.time;
-            await new Promise((r) => setTimeout(r, target - performance.now()));
-            animation.ingest(e.event.data);
-          }
-        }
-      }
-    });
+    .then(async (text) => runStoredEvents(text, audioSrc));
 } else {
-  console.log("No data source.");
+  showLoadForm().then((x) => {
+    runStoredEvents(x.text, x.audioSrc);
+  });
 }
