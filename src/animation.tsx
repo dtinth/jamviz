@@ -286,7 +286,7 @@ async function runStoredEvents(
         });
       });
     }
-    const duration = (await audio.durationPromise)!;
+    const duration = await audio.durationPromise!;
     const nFrames = Math.ceil(duration * 60);
     const dataEvents: TimedGojamEvent[] = [];
     const animationFrames: FrameData[] = [];
