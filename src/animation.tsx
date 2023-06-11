@@ -294,6 +294,31 @@ interface AudioPlayer {
   getCurrentTime(): number;
 }
 
+function createProgressBar() {
+  const element = document.createElement("div");
+  element.className = "progress";
+  const bar = document.createElement("div");
+  bar.className = "progressBar";
+  element.appendChild(bar);
+  document.body.appendChild(element);
+  let lastTime = performance.now();
+  return {
+    setProgress: (progress: number): void | Promise<void> => {
+      const now = performance.now();
+      if (now - lastTime > 50) {
+        bar.style.width = `${(progress * 100).toFixed(2)}%`;
+        lastTime = now;
+        return new Promise<void>((resolve) =>
+          requestAnimationFrame(() => resolve())
+        );
+      }
+    },
+    finish: () => {
+      element.remove();
+    },
+  };
+}
+
 async function runStoredEvents(
   text: string,
   audioSrc?: string | null
@@ -323,6 +348,7 @@ async function runStoredEvents(
       throw new Error("No start time");
     }
     let nextEventIndex = 0;
+    const progressBar = createProgressBar();
     for (let i = 0; i < nFrames; i++) {
       const animationTime = (i / 60) * 1000;
       const eventTime = startTime + animationTime;
@@ -334,7 +360,10 @@ async function runStoredEvents(
         nextEventIndex++;
       }
       animationFrames.push(animation.player.frame(animationTime));
+      const wait = progressBar.setProgress(i / nFrames);
+      if (wait) await wait;
     }
+    progressBar.finish();
     return {
       frame: () => {
         const index = Math.floor(audioPlayer.getCurrentTime() * 60);
