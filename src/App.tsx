@@ -1,6 +1,11 @@
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
-import { ClientFrameData, FrameData, animation } from "./animation";
+import {
+  AnimationPlayer,
+  ClientFrameData,
+  FrameData,
+  animationPlayerPromise,
+} from "./animation";
 import { searchParams } from "./searchParams";
 
 const clock = ((v: string | null) => {
@@ -8,15 +13,26 @@ const clock = ((v: string | null) => {
 })(searchParams.get("clock"));
 
 function App() {
+  const [animationPlayer, setAnimationPlayer] = useState<
+    AnimationPlayer | undefined
+  >();
+  useEffect(() => {
+    animationPlayerPromise.then((ap) => {
+      setAnimationPlayer(ap);
+    });
+  }, []);
   return (
     <>
-      <ClientsView />
+      {!!animationPlayer && <ClientsView animationPlayer={animationPlayer} />}
       <ClockView />
     </>
   );
 }
 
-function ClientsView() {
+interface ClientsView {
+  animationPlayer: AnimationPlayer;
+}
+function ClientsView(props: ClientsView) {
   const [frameData, setFrameData] = useState<FrameData>({
     clients: [],
   });
@@ -25,7 +41,7 @@ function ClientsView() {
     let dead = false;
     async function frame() {
       if (dead) return;
-      setFrameData(animation.frame(performance.now()));
+      setFrameData(props.animationPlayer.frame(performance.now()));
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
@@ -43,7 +59,10 @@ function ClientsView() {
   );
 }
 
-function ClientView({ client }: { client: ClientFrameData }) {
+interface ClientView {
+  client: ClientFrameData;
+}
+function ClientView({ client }: ClientView) {
   const x = client.x * 300;
   const y = client.y * 100;
   return (

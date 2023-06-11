@@ -39,7 +39,16 @@ interface GojamEvent {
   levels?: number[];
 }
 
-function createAnimation() {
+export interface AnimationPlayer {
+  frame: (time: number) => FrameData;
+}
+
+export interface Animation {
+  ingest: (data: GojamEvent) => void;
+  player: AnimationPlayer;
+}
+
+function createAnimation(): Animation {
   let lastTime: number | undefined;
   const clients = new Map<string, ClientViewModel>();
   const connectedIds = new Set<string>();
@@ -106,7 +115,10 @@ function createAnimation() {
       clients: clientsToShow.map((c) => ({ ...c })),
     };
   }
-  return { ingest, frame };
+  return {
+    ingest,
+    player: { frame } satisfies AnimationPlayer,
+  };
 }
 
 interface ClientViewModel {
@@ -245,14 +257,15 @@ function exponentialRamp(
   return value * progressLeft + target * progress;
 }
 
-export const animation = createAnimation();
-
 interface TimedGojamEvent {
   time: number;
   data: GojamEvent;
 }
 
-async function runStoredEvents(text: string, audioSrc?: string | null) {
+async function runStoredEvents(
+  text: string,
+  audioSrc?: string | null
+): Promise<AnimationPlayer> {
   const events = text
     .split("\n")
     .filter((x) => x.trim())
@@ -278,6 +291,7 @@ async function runStoredEvents(text: string, audioSrc?: string | null) {
     const dataEvents: TimedGojamEvent[] = [];
     const animationFrames: FrameData[] = [];
     let startTime: number | undefined;
+    const animation = createAnimation();
     for (const e of events) {
       if (e.initial) {
         startTime = e.initial.startTime;
@@ -300,50 +314,60 @@ async function runStoredEvents(text: string, audioSrc?: string | null) {
         animation.ingest(dataEvents[nextEventIndex].data);
         nextEventIndex++;
       }
-      animationFrames.push(animation.frame(animationTime));
+      animationFrames.push(animation.player.frame(animationTime));
     }
-    animation.frame = () => {
-      const index = Math.floor(audio.currentTime * 60);
-      return animationFrames[
-        Math.max(0, Math.min(index, animationFrames.length - 1))
-      ];
+    return {
+      frame: () => {
+        const index = Math.floor(audio.currentTime * 60);
+        return animationFrames[
+          Math.max(0, Math.min(index, animationFrames.length - 1))
+        ];
+      },
     };
   } else {
-    let lastTime: number | undefined;
-    let target = performance.now();
-    for (const e of events) {
-      if (e.initial) {
-        lastTime = e.initial.startTime;
-        console.log(e.initial);
-        animation.ingest(e.initial.state);
-      } else if (e.event && lastTime) {
-        const delta = e.event.time - lastTime;
-        target += delta;
-        lastTime = e.event.time;
-        await new Promise((r) => setTimeout(r, target - performance.now()));
-        animation.ingest(e.event.data);
+    const animation = createAnimation();
+    const worker = async () => {
+      let lastTime: number | undefined;
+      let target = performance.now();
+      for (const e of events) {
+        if (e.initial) {
+          lastTime = e.initial.startTime;
+          console.log(e.initial);
+          animation.ingest(e.initial.state);
+        } else if (e.event && lastTime) {
+          const delta = e.event.time - lastTime;
+          target += delta;
+          lastTime = e.event.time;
+          await new Promise((r) => setTimeout(r, target - performance.now()));
+          animation.ingest(e.event.data);
+        }
       }
-    }
+    };
+    worker();
+    return animation.player;
   }
 }
 
-if (server) {
-  const eventSource = new EventSource(server + "/events");
-  eventSource.addEventListener("message", (event) => {
-    const data = JSON.parse(event.data);
-    animation.ingest(data);
-  });
-} else if (eventNdjsonSrc) {
-  fetch(eventNdjsonSrc)
-    .then((r) => {
-      if (!r.ok) {
-        throw new Error(r.statusText);
-      }
-      return r.text();
-    })
-    .then(async (text) => runStoredEvents(text, audioSrc));
-} else {
-  showLoadForm().then((x) => {
-    runStoredEvents(x.text, x.audioSrc);
-  });
+export async function getAnimationPlayer(): Promise<AnimationPlayer> {
+  if (server) {
+    const eventSource = new EventSource(server + "/events");
+    const animation = createAnimation();
+    eventSource.addEventListener("message", (event) => {
+      const data = JSON.parse(event.data);
+      animation.ingest(data);
+    });
+    return animation.player;
+  } else if (eventNdjsonSrc) {
+    const r = await fetch(eventNdjsonSrc);
+    if (!r.ok) {
+      throw new Error(r.statusText);
+    }
+    const text = await r.text();
+    return runStoredEvents(text, audioSrc);
+  } else {
+    const x = await showLoadForm();
+    return runStoredEvents(x.text, x.audioSrc);
+  }
 }
+
+export const animationPlayerPromise = getAnimationPlayer();
