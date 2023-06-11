@@ -4,6 +4,9 @@ import { instruments } from "./data";
 import { searchParams } from "./searchParams";
 import { Approacher, approach, createApproacher } from "./Approacher";
 import { showLoadForm } from "./showLoadForm";
+import pDefer from "p-defer";
+import { createRoot } from "react-dom/client";
+import { AudioPlayer } from "./AudioPlayer";
 
 const numColumns = +searchParams.get("columns")! || 4;
 const server = searchParams.get("apiserver");
@@ -262,6 +265,35 @@ interface TimedGojamEvent {
   data: GojamEvent;
 }
 
+function createAudioPlayer(src: string): AudioPlayer {
+  const duration = pDefer<number>();
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  let audio: HTMLAudioElement | undefined;
+  root.render(
+    <AudioPlayer
+      src={src}
+      refAudio={(el) => {
+        audio = el ?? undefined;
+        if (!el) return;
+        el.addEventListener("loadedmetadata", () => {
+          duration.resolve(el.duration);
+        });
+      }}
+    />
+  );
+  return {
+    durationPromise: duration.promise,
+    getCurrentTime: () => audio?.currentTime || 0,
+  };
+}
+
+interface AudioPlayer {
+  durationPromise: Promise<number>;
+  getCurrentTime(): number;
+}
+
 async function runStoredEvents(
   text: string,
   audioSrc?: string | null
@@ -271,22 +303,9 @@ async function runStoredEvents(
     .filter((x) => x.trim())
     .map((x) => JSON.parse(x));
   if (audioSrc) {
-    let audio = document.querySelector("#audio") as HTMLAudioElement & {
-      durationPromise?: Promise<number>;
-    };
-    if (!audio) {
-      audio = document.createElement("audio");
-      audio.id = "audio";
-      audio.src = audioSrc;
-      audio.controls = true;
-      document.body.appendChild(audio);
-      audio.durationPromise = new Promise((r) => {
-        audio.addEventListener("loadedmetadata", () => {
-          r(audio.duration);
-        });
-      });
-    }
-    const duration = await audio.durationPromise!;
+    const audioPlayer: AudioPlayer = ((window as any).audioPlayer ??=
+      createAudioPlayer(audioSrc));
+    const duration = await audioPlayer.durationPromise;
     const nFrames = Math.ceil(duration * 60);
     const dataEvents: TimedGojamEvent[] = [];
     const animationFrames: FrameData[] = [];
@@ -318,7 +337,7 @@ async function runStoredEvents(
     }
     return {
       frame: () => {
-        const index = Math.floor(audio.currentTime * 60);
+        const index = Math.floor(audioPlayer.getCurrentTime() * 60);
         return animationFrames[
           Math.max(0, Math.min(index, animationFrames.length - 1))
         ];
