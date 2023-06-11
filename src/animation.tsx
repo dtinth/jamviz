@@ -9,6 +9,7 @@ const numColumns = +searchParams.get("columns")! || 4;
 const server = searchParams.get("apiserver");
 const eventNdjsonSrc = searchParams.get("src");
 const audioSrc = searchParams.get("audio");
+const hashBase = searchParams.get("color") || "";
 
 export interface Client {
   name: string;
@@ -131,7 +132,7 @@ interface ClientViewModel {
 }
 
 function createClientViewModel(id: string): ClientViewModel {
-  const hash = md5(id);
+  const hash = md5(id + hashBase);
   const hue = parseInt(hash.slice(0, 7), 16) % 360;
   const vm: ClientViewModel = {
     id,
