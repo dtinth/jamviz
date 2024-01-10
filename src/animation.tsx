@@ -10,6 +10,7 @@ import { AudioPlayer } from "./AudioPlayer";
 
 const numColumns = +searchParams.get("columns")! || 4;
 const server = searchParams.get("apiserver");
+const replay = searchParams.get("replay");
 const eventNdjsonSrc = searchParams.get("src");
 const audioSrc = searchParams.get("audio");
 const hashBase = searchParams.get("color") || "";
@@ -405,6 +406,13 @@ export async function getAnimationPlayer(): Promise<AnimationPlayer> {
       animation.ingest(data);
     });
     return animation.player;
+  } else if (replay) {
+    const r = await fetch(replay + "/events.ndjson");
+    if (!r.ok) {
+      throw new Error(r.statusText);
+    }
+    const text = await r.text();
+    return runStoredEvents(text, replay + "/audio.mp3");
   } else if (eventNdjsonSrc) {
     const r = await fetch(eventNdjsonSrc);
     if (!r.ok) {
