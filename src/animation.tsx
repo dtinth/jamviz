@@ -1,12 +1,13 @@
-import { colord } from "./colord";
+import { Theme } from "@radix-ui/themes";
 import md5 from "md5";
-import { instruments } from "./data";
-import { searchParams } from "./searchParams";
-import { Approacher, approach, createApproacher } from "./Approacher";
-import { showLoadForm } from "./showLoadForm";
 import pDefer from "p-defer";
 import { createRoot } from "react-dom/client";
+import { Approacher, approach, createApproacher } from "./Approacher";
 import { AudioPlayer } from "./AudioPlayer";
+import { colord } from "./colord";
+import { instruments } from "./data";
+import { searchParams } from "./searchParams";
+import { showLoadForm } from "./showLoadForm";
 
 const numColumns = +searchParams.get("columns")! || 4;
 const server = searchParams.get("apiserver");
@@ -273,16 +274,18 @@ function createAudioPlayer(src: string): AudioPlayer {
   const root = createRoot(container);
   let audio: HTMLAudioElement | undefined;
   root.render(
-    <AudioPlayer
-      src={src}
-      refAudio={(el) => {
-        audio = el ?? undefined;
-        if (!el) return;
-        el.addEventListener("loadedmetadata", () => {
-          duration.resolve(el.duration);
-        });
-      }}
-    />
+    <Theme appearance="dark">
+      <AudioPlayer
+        src={src}
+        refAudio={(el) => {
+          audio = el ?? undefined;
+          if (!el) return;
+          el.addEventListener("loadedmetadata", () => {
+            duration.resolve(el.duration);
+          });
+        }}
+      />
+    </Theme>
   );
   return {
     durationPromise: duration.promise,

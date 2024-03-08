@@ -69,7 +69,8 @@ function ClientView({ client }: ClientView) {
     <div
       className="client"
       style={{
-        transform: `translate(${x}px, ${y}px)`,
+        transform: `scale(var(--zoom, 1)) translate(${x}px, ${y}px)`,
+        transformOrigin: "top left",
         opacity: client.a,
         ...({
           "--sound-level": client.displayedSoundLevel,
