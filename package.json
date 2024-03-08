@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@radix-ui/themes": "^2.0.3",
     "colord": "^2.9.3",
     "immer": "^10.0.2",
     "md5": "^2.3.0",
